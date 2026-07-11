@@ -100,3 +100,92 @@ pub fn attribute(
 
     AttributeMatcher(name.as_ref().to_string(), inner)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{Result, by_testid, matchers::attribute, render};
+    use dioxus::prelude::*;
+    use test_that::prelude::*;
+
+    #[tokio::test]
+    async fn attribute_matches_when_asserting_async() -> Result<()> {
+        #[component]
+        fn TestComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "item",
+                    "my-attribute": "Arbitrary value",
+                }
+            }
+        }
+        let tester = render(TestComponent).build();
+
+        tester
+            .query(by_testid("item"))
+            .expect(attribute("my-attribute", some(eq("Arbitrary value"))))
+            .await
+    }
+
+    #[test]
+    fn attribute_does_not_match_when_attribute_has_wrong_value() -> TestResult<()> {
+        #[component]
+        fn TestComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "item",
+                    "my-attribute": "Arbitrary value",
+                }
+            }
+        }
+        let tester = render(TestComponent).build();
+
+        let result = tester
+            .query(by_testid("item"))
+            .expect(attribute("my-attribute", some(eq("A different value"))))
+            .immediately();
+
+        verify_that!(result, err(anything()))
+    }
+
+    #[test]
+    fn attribute_does_not_match_when_attribute_is_missing() -> TestResult<()> {
+        #[component]
+        fn TestComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "item",
+                }
+            }
+        }
+        let tester = render(TestComponent).build();
+
+        let result = tester
+            .query(by_testid("item"))
+            .expect(attribute("my-attribute", some(eq("A different value"))))
+            .immediately();
+
+        verify_that!(result, err(anything()))
+    }
+
+    #[test]
+    fn attribute_does_not_match_when_attribute_is_present_but_asserting_absence() -> TestResult<()>
+    {
+        #[component]
+        fn TestComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "item",
+                    "my-attribute": "Arbitrary value",
+                }
+            }
+        }
+        let tester = render(TestComponent).build();
+
+        let result = tester
+            .query(by_testid("item"))
+            .expect(attribute("my-attribute", none()))
+            .immediately();
+
+        verify_that!(result, err(anything()))
+    }
+}
