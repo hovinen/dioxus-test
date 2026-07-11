@@ -188,7 +188,7 @@ impl<'doc> ResolvedElement<'doc> {
             .map(ElementId)
     }
 
-    pub(crate) fn attribute<'element>(&self, arg: &str) -> Option<String> {
+    pub(crate) fn attribute(&self, arg: &str) -> Option<String> {
         self.node_id
             .resolve(&self.guard.inner())
             .element_data()?
