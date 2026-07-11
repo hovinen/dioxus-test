@@ -443,4 +443,40 @@ mod tests {
             ))))
         )
     }
+
+    #[tokio::test]
+    async fn assertion_failure_message_includes_dom_when_element_was_awaited() -> TestResult<()> {
+        #[component]
+        fn MyComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "Arbitrary testid"
+                }
+            }
+        }
+        let tester = render(MyComponent).build();
+
+        let result = tester
+            .query(by_testid("Different testid"))
+            .expect(anything())
+            .await;
+
+        verify_that!(
+            result,
+            err(displays_as(contains_substring(indoc!(
+                r#"
+                Failed assertion: No such element with test ID `Different testid`
+                DOM is:
+                <html>
+                  <head />
+                  <body>
+                    <main id="main">
+                      <div data-testid="Arbitrary testid" />
+                    </main>
+                  </body>
+                </html>
+                "#
+            ))))
+        )
+    }
 }
