@@ -333,12 +333,10 @@ pub fn by_testid(testid: impl AsRef<str>) -> impl TryIntoSelector {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        by_testid,
-        matchers::{eq, inner_html},
-        render,
-    };
+    use crate::{by_testid, matchers::inner_html, render};
     use dioxus::prelude::*;
+    use indoc::indoc;
+    use test_that::prelude::*;
 
     #[tokio::test]
     async fn document_allows_multiple_unresolved_queries_in_parallel() {
@@ -371,5 +369,78 @@ mod tests {
             .expect(inner_html(eq("Now clicked")))
             .immediately()
             .unwrap();
+    }
+
+    #[test]
+    fn assertion_failure_message_includes_dom_when_no_element_matches_css_query() -> TestResult<()>
+    {
+        #[component]
+        fn MyComponent() -> Element {
+            rsx! {
+                div {
+                    class: "arbitrary-class"
+                }
+            }
+        }
+        let tester = render(MyComponent).build();
+
+        let result = tester
+            .query(".different-class")
+            .expect(anything())
+            .immediately();
+
+        verify_that!(
+            result,
+            err(displays_as(contains_substring(indoc!(
+                r#"
+                Failed assertion: No such element with CSS selector `.different-class`
+                DOM is:
+                <html>
+                  <head />
+                  <body>
+                    <main id="main">
+                      <div class="arbitrary-class" />
+                    </main>
+                  </body>
+                </html>
+                "#
+            ))))
+        )
+    }
+
+    #[test]
+    fn assertion_failure_message_includes_dom_when_no_element_has_testid() -> TestResult<()> {
+        #[component]
+        fn MyComponent() -> Element {
+            rsx! {
+                div {
+                    "data-testid": "Arbitrary testid"
+                }
+            }
+        }
+        let tester = render(MyComponent).build();
+
+        let result = tester
+            .query(by_testid("Different testid"))
+            .expect(anything())
+            .immediately();
+
+        verify_that!(
+            result,
+            err(displays_as(contains_substring(indoc!(
+                r#"
+                Failed assertion: No such element with test ID `Different testid`
+                DOM is:
+                <html>
+                  <head />
+                  <body>
+                    <main id="main">
+                      <div data-testid="Arbitrary testid" />
+                    </main>
+                  </body>
+                </html>
+                "#
+            ))))
+        )
     }
 }

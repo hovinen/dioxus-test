@@ -28,12 +28,12 @@ impl std::fmt::Display for TesterError {
                 write!(f, "Invalid CSS selector {selector}")
             }
             TesterError::NoSuchElementWithTestId(id, dom) => {
-                write!(f, "No such element with test ID {id}\nDOM is:\n{dom}")
+                write!(f, "No such element with test ID `{id}`\nDOM is:\n{dom}")
             }
             TesterError::NoSuchElementWithCssSelector(selector, dom) => {
                 write!(
                     f,
-                    "No such element with CSS selector {selector}\nDOM is:\n{dom}"
+                    "No such element with CSS selector `{selector}`\nDOM is:\n{dom}"
                 )
             }
             TesterError::AssertionFailure(description) => {

@@ -171,12 +171,12 @@ impl<'vdom> ElementCondition<'vdom> {
     pub(crate) fn new(
         data: &'vdom DocumentTester,
         query: SelectorList,
-        error: Rc<ErrorBuilder>,
+        error_builder: Rc<ErrorBuilder>,
     ) -> Self {
         Self {
             data,
             query,
-            error_builder: error,
+            error_builder,
         }
     }
 
@@ -384,7 +384,7 @@ impl<'vdom> ElementCondition<'vdom> {
     /// ```
     pub fn immediately(&'vdom self) -> Result<ResolvedElement<'vdom>, TesterError> {
         match self.check() {
-            ControlFlow::Continue(_) => Err((self.error_builder)(self.data.root().inner_html())),
+            ControlFlow::Continue(_) => Err((self.error_builder)(self.data.root().outer_html())),
             ControlFlow::Break(b) => Ok(self.data.build_resolved_element(b)),
         }
     }
@@ -408,7 +408,7 @@ impl<'vdom> Waitable for ElementCondition<'vdom> {
     }
 
     fn describe_failure(&self) -> TesterError {
-        (self.error_builder)(self.data.root().inner_html())
+        (self.error_builder)(self.data.root().outer_html())
     }
 }
 
@@ -429,7 +429,7 @@ where
     fn explain_match_failure(&self, matcher: &M) -> String {
         match Waitable::check(self) {
             ControlFlow::Continue(_) => {
-                (self.error_builder)(self.data.root().inner_html()).to_string()
+                (self.error_builder)(self.data.root().outer_html()).to_string()
             }
             ControlFlow::Break(n) => matcher
                 .explain_match(&self.data.build_resolved_element(n))
