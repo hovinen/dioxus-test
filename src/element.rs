@@ -189,6 +189,16 @@ impl<'doc> ResolvedElement<'doc> {
             .and_then(|attr| attr.value.parse::<usize>().ok())
             .map(ElementId)
     }
+
+    pub(crate) fn attribute(&self, arg: &str) -> Option<String> {
+        self.node_id
+            .resolve(&self.guard.inner())
+            .element_data()?
+            .attrs
+            .iter()
+            .find(|attr| *attr.name.local == *arg)
+            .map(|attr| attr.value.clone())
+    }
 }
 
 impl<'doc> std::fmt::Debug for ResolvedElement<'doc> {
