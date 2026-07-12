@@ -1,7 +1,7 @@
 use crate::{DocumentTester, TesterError, element::ResolvedElement, result::ErrorBuilder};
 use blitz_dom::SelectorList;
 use std::{marker::PhantomData, ops::ControlFlow, pin::Pin, rc::Rc};
-use test_that::{matcher::MatcherResult, prelude::Matcher};
+use test_that::{description::Description, matcher::MatcherResult, prelude::Matcher};
 
 /// The maximum number of attempts [DocumentTester] will make to find a given element or make a
 /// given assertion on the DOM before concluding that the element will not appear.
@@ -163,19 +163,22 @@ trait Waitable: EventLoopDriver {
 #[derive(Clone)]
 pub struct ElementCondition<'vdom> {
     data: &'vdom DocumentTester,
-    query: SelectorList,
+    query: String,
+    selector: SelectorList,
     error_builder: Rc<ErrorBuilder>,
 }
 
 impl<'vdom> ElementCondition<'vdom> {
     pub(crate) fn new(
         data: &'vdom DocumentTester,
-        query: SelectorList,
+        query: String,
+        selector: SelectorList,
         error_builder: Rc<ErrorBuilder>,
     ) -> Self {
         Self {
             data,
             query,
+            selector,
             error_builder,
         }
     }
@@ -400,7 +403,7 @@ impl<'vdom> Waitable for ElementCondition<'vdom> {
     type Output = usize;
 
     fn check(&self) -> ControlFlow<Self::Output> {
-        if let Some(element) = self.data.get_element(&self.query) {
+        if let Some(element) = self.data.get_element(&self.selector) {
             ControlFlow::Break(element)
         } else {
             ControlFlow::Continue(())
@@ -426,14 +429,20 @@ where
         }
     }
 
-    fn explain_match_failure(&self, matcher: &M) -> String {
+    fn explain_match_failure(&self, matcher: &M) -> TesterError {
         match Waitable::check(self) {
-            ControlFlow::Continue(_) => {
-                (self.error_builder)(self.data.root().outer_html()).to_string()
+            ControlFlow::Continue(_) => (self.error_builder)(self.data.root().outer_html()),
+            ControlFlow::Break(n) => {
+                let resolved = self.data.build_resolved_element(n);
+                TesterError::AssertionFailure {
+                    query: self.query.clone(),
+                    actual_outer_html: Description::new()
+                        .nested(Description::new().text(resolved.outer_html()))
+                        .to_string(),
+                    matcher_description: matcher.describe(MatcherResult::Match).to_string(),
+                    failure_explanation: matcher.explain_match(&resolved).to_string(),
+                }
             }
-            ControlFlow::Break(n) => matcher
-                .explain_match(&self.data.build_resolved_element(n))
-                .to_string(),
         }
     }
 }
@@ -515,12 +524,17 @@ impl<'vdom> IntoFuture for ElementCondition<'vdom> {
 #[derive(Clone)]
 pub struct AllElementsCondition<'vdom> {
     data: &'vdom DocumentTester,
-    query: SelectorList,
+    query: String,
+    selector: SelectorList,
 }
 
 impl<'vdom> AllElementsCondition<'vdom> {
-    pub(crate) fn new(data: &'vdom DocumentTester, query: SelectorList) -> Self {
-        Self { data, query }
+    pub(crate) fn new(data: &'vdom DocumentTester, query: String, selector: SelectorList) -> Self {
+        Self {
+            data,
+            query,
+            selector,
+        }
     }
 
     /// Asserts that the given [Matcher] matches this element collection, either immediately or in
@@ -600,7 +614,7 @@ impl<'vdom> AllElementsCondition<'vdom> {
     }
 
     pub fn immediately(&'vdom self) -> Vec<ResolvedElement<'vdom>> {
-        let node_ids = self.data.get_elements(&self.query);
+        let node_ids = self.data.get_elements(&self.selector);
         node_ids
             .into_iter()
             .map(|node_id| self.data.build_resolved_element(node_id))
@@ -625,8 +639,27 @@ where
         }
     }
 
-    fn explain_match_failure(&self, matcher: &M) -> String {
-        matcher.explain_match(&self.immediately()).to_string()
+    fn explain_match_failure(&self, matcher: &M) -> TesterError {
+        let resolved = self.immediately();
+        TesterError::AssertionFailure {
+            query: self.query.clone(),
+            actual_outer_html: Description::new()
+                .text("[")
+                .nested(Description::new().text(resolved.iter().fold(
+                    String::new(),
+                    |mut acc, element| {
+                        if !acc.is_empty() {
+                            acc.push_str(",\n");
+                        }
+                        acc.push_str(&element.outer_html());
+                        acc
+                    },
+                )))
+                .text("]")
+                .to_string(),
+            matcher_description: matcher.describe(MatcherResult::Match).to_string(),
+            failure_explanation: matcher.explain_match(&resolved).to_string(),
+        }
     }
 }
 
@@ -790,9 +823,7 @@ where
     /// ```
     pub fn immediately(&'vdom self) -> Result<(), TesterError> {
         match self.element.matches(&self.matcher) {
-            ControlFlow::Continue(_) => Err(TesterError::AssertionFailure(
-                self.element.explain_match_failure(&self.matcher),
-            )),
+            ControlFlow::Continue(_) => Err(self.element.explain_match_failure(&self.matcher)),
             ControlFlow::Break(_) => Ok(()),
         }
     }
@@ -818,7 +849,7 @@ where
     }
 
     fn describe_failure(&self) -> TesterError {
-        TesterError::AssertionFailure(self.element.explain_match_failure(&self.matcher))
+        self.element.explain_match_failure(&self.matcher)
     }
 }
 
@@ -840,5 +871,5 @@ where
 pub trait Matchable<M> {
     fn matches(&self, matcher: &M) -> ControlFlow<()>;
 
-    fn explain_match_failure(&self, matcher: &M) -> String;
+    fn explain_match_failure(&self, matcher: &M) -> TesterError;
 }

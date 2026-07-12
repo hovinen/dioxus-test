@@ -223,10 +223,11 @@ impl DocumentTester {
     pub fn query(&self, query: impl TryIntoSelector) -> ElementCondition<'_> {
         let document = self.document.borrow_mut();
         let error = query.to_error_builder();
+        let rendered_query = query.to_string();
         let selector = query
             .try_into_selector(&document)
             .expect("Invalid CSS selector");
-        ElementCondition::new(self, selector, error)
+        ElementCondition::new(self, rendered_query, selector, error)
     }
 
     /// Returns a representation of elements in the DOM satisfying the given query.
@@ -242,10 +243,11 @@ impl DocumentTester {
     /// Panics if the query contains a syntactically invalid CSS selector.
     pub fn query_all(&self, query: impl TryIntoSelector) -> AllElementsCondition<'_> {
         let document = self.document.borrow_mut();
+        let rendered_query = query.to_string();
         let selector = query
             .try_into_selector(&document)
             .expect("Invalid CSS selector");
-        AllElementsCondition::new(self, selector)
+        AllElementsCondition::new(self, rendered_query, selector)
     }
 
     pub(crate) fn build_resolved_element(&self, id: usize) -> ResolvedElement<'_> {
@@ -263,13 +265,13 @@ impl DocumentTester {
 ///
 /// One can also select by [testid](https://testing-library.com/docs/queries/bytestid/) using the
 /// function [by_testid].
-pub trait TryIntoSelector {
+pub trait TryIntoSelector: std::fmt::Display {
     fn try_into_selector(self, document: &DioxusDocument) -> Result<SelectorList, TesterError>;
 
     fn to_error_builder(&self) -> Rc<ErrorBuilder>;
 }
 
-impl<T: AsRef<str>> TryIntoSelector for T {
+impl<T: AsRef<str> + std::fmt::Display> TryIntoSelector for T {
     fn try_into_selector(self, document: &DioxusDocument) -> Result<SelectorList, TesterError> {
         document
             .inner()
@@ -298,6 +300,12 @@ impl TryIntoSelector for QueryByTestId {
     fn to_error_builder(&self) -> Rc<ErrorBuilder> {
         let testid = self.0.clone();
         Rc::new(move |dom| TesterError::NoSuchElementWithTestId(testid.clone(), dom))
+    }
+}
+
+impl std::fmt::Display for QueryByTestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "data-testid={}", self.0)
     }
 }
 
@@ -337,6 +345,76 @@ mod tests {
     use dioxus::prelude::*;
     use indoc::indoc;
     use test_that::prelude::*;
+
+    #[tokio::test]
+    async fn assertion_failure_message_includes_query_actual_value_description_and_explanation()
+    -> TestResult<()> {
+        #[component]
+        fn MyComponent() -> Element {
+            rsx! {
+                div {
+                     "data-testid": "the-label",
+                     "Actual value"
+                }
+            }
+        }
+        let tester = render(MyComponent).build();
+
+        let result = tester
+            .query(by_testid("the-label"))
+            .expect(inner_html(eq("Expected value")))
+            .immediately();
+
+        verify_that!(
+            result,
+            err(displays_as(eq(indoc!(
+                r#"
+                Element: data-testid=the-label
+                Expected: has inner HTML which
+                  is equal to "Expected value"
+                But was:
+                  <div data-testid="the-label">
+                  Actual value</div>
+                which has inner HTML which
+                  isn't equal to "Expected value""#
+            ))))
+        )
+    }
+
+    #[tokio::test]
+    async fn assertion_failure_message_includes_all_matched_elements_for_query_all()
+    -> TestResult<()> {
+        #[component]
+        fn MyComponent() -> Element {
+            rsx! {
+                div {
+                     "data-testid": "the-label",
+                     "Actual value 1"
+                }
+            }
+        }
+        let tester = render(MyComponent).build();
+
+        let result = tester
+            .query_all(by_testid("the-label"))
+            .expect(empty())
+            .immediately();
+
+        verify_that!(
+            result,
+            err(displays_as(eq(indoc!(
+                r#"
+                Element: data-testid=the-label
+                Expected: is empty
+                But was:
+                [
+                  <div data-testid="the-label">
+                  Actual value 1</div>
+                ]
+                which isn't empty"#
+            ))))
+        )
+    }
 
     #[tokio::test]
     async fn document_allows_multiple_unresolved_queries_in_parallel() {
@@ -393,7 +471,7 @@ mod tests {
             result,
             err(displays_as(contains_substring(indoc!(
                 r#"
-                Failed assertion: No such element with CSS selector `.different-class`
+                No such element with CSS selector `.different-class`
                 DOM is:
                 <html>
                   <head />
@@ -429,7 +507,7 @@ mod tests {
             result,
             err(displays_as(contains_substring(indoc!(
                 r#"
-                Failed assertion: No such element with test ID `Different testid`
+                No such element with test ID `Different testid`
                 DOM is:
                 <html>
                   <head />
@@ -465,7 +543,7 @@ mod tests {
             result,
             err(displays_as(contains_substring(indoc!(
                 r#"
-                Failed assertion: No such element with test ID `Different testid`
+                No such element with test ID `Different testid`
                 DOM is:
                 <html>
                   <head />
