@@ -18,7 +18,12 @@ pub enum TesterError {
     NoSuchElementWithCssSelector(String, String),
 
     /// An assertion on a test element failed
-    AssertionFailure(String),
+    AssertionFailure {
+        query: String,
+        actual_outer_html: String,
+        matcher_description: String,
+        failure_explanation: String,
+    },
 }
 
 impl std::fmt::Display for TesterError {
@@ -36,8 +41,16 @@ impl std::fmt::Display for TesterError {
                     "No such element with CSS selector `{selector}`\nDOM is:\n{dom}"
                 )
             }
-            TesterError::AssertionFailure(description) => {
-                write!(f, "Failed assertion: {description}")
+            TesterError::AssertionFailure {
+                query,
+                actual_outer_html,
+                matcher_description,
+                failure_explanation,
+            } => {
+                write!(
+                    f,
+                    "Element: {query}\nExpected: {matcher_description}\nBut was:\n{actual_outer_html}\n{failure_explanation}"
+                )
             }
         }
     }

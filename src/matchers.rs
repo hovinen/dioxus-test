@@ -21,7 +21,7 @@ pub fn inner_html(inner: impl Matcher<String>) -> impl Matcher<ResolvedElement> 
     impl<InnerMatcher: Describable> Describable for InnerHtmlMatcher<InnerMatcher> {
         fn describe(&self, matcher_result: MatcherResult) -> test_that::description::Description {
             Description::new()
-                .text("Has inner HTML matching")
+                .text("has inner HTML which")
                 .nested(self.0.describe(matcher_result))
         }
     }
