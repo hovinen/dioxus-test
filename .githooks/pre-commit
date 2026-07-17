@@ -10,4 +10,4 @@ echo "Running cargo clippy..."
 cargo clippy --all-targets --all-features -- -D warnings
 
 echo "Building documentation..."
-cargo doc --no-deps
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
