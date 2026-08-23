@@ -465,7 +465,7 @@ impl<'parent> QueryByRole<'parent> {
     }
 
     fn element_matches(&self, node: &accesskit::Node, aria_tree: &AriaTree) -> bool {
-        if node.role() != self.role {
+        if node.is_hidden() || node.role() != self.role {
             false
         } else if let Some(name) = &self.name {
             aria_tree.compute_accessible_name(node).contains(name)
